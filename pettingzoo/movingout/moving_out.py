@@ -24,13 +24,23 @@ class parallel_env(ParallelEnv):
         dense_rewards_setting=None,
         repeat_actions=1,
         add_noise_to_item=False,
+        hold_mode="toggle",
+        cograb_curriculum=0.0,
+        cograb_teleport_frac=0.5,
     ):
+        # hold_mode: "toggle" = action[2]>0 presses the grab button (flips
+        # state); "desired" = action[2]>0 means WANT-TO-HOLD — the wrapper
+        # presses only when the wanted state differs from the actual one,
+        # so exploration noise cannot chatter-release a held item.
+        self.hold_mode = hold_mode
         self.map_name = map_name
         self.env = MovingOutEnv(
             reward_setting=reward_setting,
             dense_rewards_setting=dense_rewards_setting,
             map_name=map_name,
             add_noise_to_item=add_noise_to_item,
+            cograb_curriculum=cograb_curriculum,
+            cograb_teleport_frac=cograb_teleport_frac,
         )
 
         self.possible_agents = ["robot_1", "robot_2"]
@@ -64,20 +74,15 @@ class parallel_env(ParallelEnv):
     def step(self, actions):
         self.steps += 1
         action_0 = actions[self.agents[0]]
-        if action_0[2] > 0:
-            action_0[2] = True
-        else:
-            action_0[2] = False
-        action_0 = list(action_0)
-        # action_0 = list(action_0[0]) + [action_0[1]]
-
         action_1 = actions[self.agents[1]]
-        # action_1 = list(action_1[0]) + [action_1[1]]
-
-        if action_1[2] > 0:
-            action_1[2] = True
+        if self.hold_mode == "desired":
+            held = self.env.if_hold
+            action_0[2] = bool(action_0[2] > 0) != bool(held[0])
+            action_1[2] = bool(action_1[2] > 0) != bool(held[1])
         else:
-            action_1[2] = False
+            action_0[2] = action_0[2] > 0
+            action_1[2] = action_1[2] > 0
+        action_0 = list(action_0)
         action_1 = list(action_1)
 
         actions = [action_0, action_1]
